@@ -49,7 +49,7 @@ elif config.dataset == "webface":
     config.lr_func = lr_step_func
 
 elif config.dataset == "tuning":
-    config.rec = "data/faces_webface_112x112"
+    config.rec = "/home/sonnt373/Desktop/SoNg/Face_quality/dev/data/data_train_100k_140723"
     config.num_classes = 10572
     config.num_image = 501195
     config.num_epoch = 34   #  [22, 30, 35] [22, 30, 40]

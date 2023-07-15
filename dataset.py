@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-
+from PIL import  ImageFilter
 
 class BackgroundGenerator(threading.Thread):
     def __init__(self, generator, local_rank, max_prefetch=6):
@@ -70,34 +70,6 @@ class DataLoaderX(DataLoader):
         return batch
 
 
-class FaceDataset(Dataset):
-    def __init__(self, root_dir, json_path,  local_rank):
-        super(FaceDataset, self).__init__()
-        self.transform = transforms.Compose(
-            [transforms.ToPILImage(),
-             transforms.RandomHorizontalFlip(),
-             transforms.ToTensor(),
-             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-             ])
-        self.root_dir = root_dir
-        self.local_rank = local_rank
-        
-        with open(json_path, 'r') as f:
-            self.data = json.load(f)
-
-    def __getitem__(self, index):
-        data_item = self.data[str(index)]
-        img = cv2.imread(os.path.join(self.root_dir, data_item['path']))
-        sample = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        label = int(data_item['labels'])
-        label = torch.tensor(label, dtype=torch.long)
-        sample = mx.image.imdecode(img).asnumpy()
-        if self.transform is not None:
-            sample = self.transform(sample)
-        return sample, label
-
-    def __len__(self):
-        return len(self.data)
 
 class MXFaceDataset(Dataset):
     def __init__(self, root_dir, local_rank):
@@ -137,3 +109,41 @@ class MXFaceDataset(Dataset):
     def __len__(self):
         return len(self.imgidx)
 
+
+class FaceDataset(Dataset):
+    def __init__(self, root_dir, json_path):
+        super(FaceDataset, self).__init__()
+        self.transform = transforms.Compose(
+            [transforms.ToPILImage(),
+             transforms.RandomHorizontalFlip(),
+             transforms.ColorJitter(brightness=0.2, contrast=0.2),
+             transforms.RandomApply([transforms.GaussianBlur(kernel_size=3)], p=0.2),
+             transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.2),
+             transforms.RandomApply([transforms.RandomAffine(degrees=10)], p=0.2),
+             transforms.RandomApply([transforms.RandomPerspective(distortion_scale=0.2)], p=0.2),
+             transforms.RandomApply([transforms.RandomErasing(p=0.2)], p=0.2),
+             transforms.RandomApply([transforms.Lambda(lambda img: img.filter(ImageFilter.SHARPEN))], p=0.2),
+             transforms.RandomApply([transforms.Lambda(lambda img: img.filter(ImageFilter.GaussianBlur(5)))], p=0.2),
+             transforms.RandomApply([transforms.Lambda(lambda img: img.filter(ImageFilter.BLUR))], p=0.2),
+             transforms.Resize((112, 112)),
+             transforms.ToTensor(),
+             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+             ])
+        
+        self.root_dir = root_dir
+        
+        with open(json_path, 'r') as f:
+            self.data = json.load(f)
+
+    def __getitem__(self, index):
+        data_item = self.data[str(index)]
+        img = cv2.imread(os.path.join(self.root_dir, data_item['path']))
+        sample = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        label = int(data_item['labels'])
+        label = torch.tensor(label, dtype=torch.long)
+        if self.transform is not None:
+            sample = self.transform(sample)
+        return sample, label
+
+    def __len__(self):
+        return len(self.data)
