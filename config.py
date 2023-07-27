@@ -1,13 +1,13 @@
 from easydict import EasyDict as edict
 
 config = edict()
-config.dataset = "tuning" # training dataset
+config.dataset = "tuning_2class" # training dataset
 config.embedding_size = 512 # embedding size of evaluation
 config.momentum = 0.9
 config.weight_decay = 5e-4
-config.batch_size = 128 # batch size per GPU
+config.batch_size = 256 # batch size per GPU
 config.lr = 0.01
-config.output = "output/R50_CRFIQA" # train evaluation output folder
+config.output = "output/R50_CRFIQA_resnet100_2class_2607" # train evaluation output folder
 config.global_step=0 # step to resume
 config.s=64.0
 config.m=0.50
@@ -16,10 +16,7 @@ config.beta=0.5
 
 
 # type of network to train [ iresnet100 | iresnet50 ]
-config.network = "iresnet50"
-
-
-
+config.network = "iresnet100"
 
 if config.dataset == "emoreIresNet":
     config.rec = "datafaces_emore"
@@ -49,15 +46,29 @@ elif config.dataset == "webface":
     config.lr_func = lr_step_func
 
 elif config.dataset == "tuning":
-    config.rec = "/home/sonnt373/Desktop/SoNg/Face_quality/dev/data/data_train_100k_140723"
-    config.num_classes = 10572
-    config.num_image = 501195
-    config.num_epoch = 34   #  [22, 30, 35] [22, 30, 40]
+    config.rec = "/media/thainq97/DATA/GHTK/sonnt373/data/data_train_100k_140723_300k/data_train_100k_140723"
+    config.num_classes = 9064
+    config.num_image = 372427
+    config.num_epoch = 18   #  [22, 30, 35] [22, 30, 40]
     config.warmup_epoch = -1
     config.val_targets = ["lfw", "cfp_fp", "agedb_30"]
     config.eval_step= 958 #33350
 
     def lr_step_func(epoch):
-        return ((epoch + 1) / (4 + 1)) ** 2 if epoch < config.warmup_epoch else 0.1 ** len(
-            [m for m in [20, 28, 32] if m - 1 <= epoch])
+        return ((epoch + 1) / (4 + 1)) ** 2 if epoch < -1 else 0.1 ** len(
+            [m for m in [8, 14,20,25] if m - 1 <= epoch])  # [m for m in [8, 14,20,25] if m - 1 <= epoch])
+    config.lr_func = lr_step_func
+
+elif config.dataset == "tuning_2class":
+    config.rec = "/media/thainq97/DATA/GHTK/sonnt373/data/data_train_classifi_2class"
+    config.num_classes = 2
+    config.num_image = 251713
+    config.num_epoch = 18   #  [22, 30, 35] [22, 30, 40]
+    config.warmup_epoch = -1
+    config.val_targets = ["lfw", "cfp_fp", "agedb_30"]
+    config.eval_step= 958 #33350
+
+    def lr_step_func(epoch):
+        return ((epoch + 1) / (4 + 1)) ** 2 if epoch < -1 else 0.1 ** len(
+            [m for m in [8, 14,20,25] if m - 1 <= epoch])  # [m for m in [8, 14,20,25] if m - 1 <= epoch])
     config.lr_func = lr_step_func

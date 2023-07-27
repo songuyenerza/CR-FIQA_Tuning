@@ -4,13 +4,49 @@ import queue as Queue
 import threading
 import json
 import cv2
+import random
+
 
 import mxnet as mx
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-from PIL import  ImageFilter
+from PIL import Image, ImageEnhance
+
+from augment.blur import DefocusBlur, MotionBlur
+
+
+def adjust_brightness_contrast(original):
+    # Randomly generate brightness and contrast values
+    brightness = random.randint(95, 350)
+    contrast = random.randint(160, 180)
+    
+    # Convert brightness and contrast values to appropriate ranges
+    brightness = int((brightness - 0) * (255 - (-255)) / (510 - 0) + (-255))
+    contrast = int((contrast - 0) * (127 - (-127)) / (254 - 0) + (-127))
+    
+    # Adjust brightness
+    img = original.copy()
+    if brightness != 0:
+        if brightness > 0:
+            shadow = brightness
+            max = 255
+        else:
+            shadow = 0
+            max = 255 + brightness
+        al_pha = (max - shadow) / 255
+        ga_mma = shadow
+        img = cv2.addWeighted(img, al_pha, img, 0, ga_mma)
+    
+    # Adjust contrast
+    if contrast != 0:
+        Alpha = float(131 * (contrast + 127)) / (127 * (131 - contrast))
+        Gamma = 127 * (1 - Alpha)
+        img = cv2.addWeighted(img, Alpha, img, 0, Gamma)
+    
+    return img
+
 
 class BackgroundGenerator(threading.Thread):
     def __init__(self, generator, local_rank, max_prefetch=6):
@@ -109,26 +145,27 @@ class MXFaceDataset(Dataset):
     def __len__(self):
         return len(self.imgidx)
 
+def random_crop(image, ratio = 0.07):
+    pct_focusx = random.uniform(0, ratio)
+    pct_focusy = random.uniform(0, ratio)
+    x, y = image.size
+    image = image.crop((x*pct_focusx, y*pct_focusy, x*(1-pct_focusx), y*(1-pct_focusy)))
+    
+    return image
 
 class FaceDataset(Dataset):
     def __init__(self, root_dir, json_path):
         super(FaceDataset, self).__init__()
         self.transform = transforms.Compose(
             [transforms.ToPILImage(),
-             transforms.RandomHorizontalFlip(),
-             transforms.ColorJitter(brightness=0.2, contrast=0.2),
-             transforms.RandomApply([transforms.GaussianBlur(kernel_size=3)], p=0.2),
-             transforms.RandomApply([transforms.RandomRotation(degrees=10)], p=0.2),
-             transforms.RandomApply([transforms.RandomAffine(degrees=10)], p=0.2),
-             transforms.RandomApply([transforms.RandomPerspective(distortion_scale=0.2)], p=0.2),
-             transforms.RandomApply([transforms.RandomErasing(p=0.2)], p=0.2),
-             transforms.RandomApply([transforms.Lambda(lambda img: img.filter(ImageFilter.SHARPEN))], p=0.2),
-             transforms.RandomApply([transforms.Lambda(lambda img: img.filter(ImageFilter.GaussianBlur(5)))], p=0.2),
-             transforms.RandomApply([transforms.Lambda(lambda img: img.filter(ImageFilter.BLUR))], p=0.2),
-             transforms.Resize((112, 112)),
-             transforms.ToTensor(),
-             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-             ])
+            transforms.ColorJitter(brightness=0.5, contrast=0.5,saturation=0.3, hue=0.2 ),
+            transforms.RandomResizedCrop(size=(112,112),
+                                scale=(0.85, 1.15)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(10),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ])
         
         self.root_dir = root_dir
         
@@ -138,9 +175,96 @@ class FaceDataset(Dataset):
     def __getitem__(self, index):
         data_item = self.data[str(index)]
         img = cv2.imread(os.path.join(self.root_dir, data_item['path']))
+        choice = random.uniform(0,1)
+        if choice > 0.4:
+            img = adjust_brightness_contrast(img)
+
+        # img_ = Image.fromarray(img)
+        
+        # # add Augment
+        # img_ = random_crop(img_)
+
+        # # Random sharpen
+        # choice = random.uniform(0,1)
+        # if choice > 0.7:
+        #     img3 = ImageEnhance.Sharpness(img_)
+        #     img_ = img3.enhance(random.randint(-2,2))
+
+        # # defocus blur random
+        # choice = random.uniform(0,1)
+        # choice_mag = random.randint(0,4)
+        # if choice > 0.7:
+        #     img_ = DefocusBlur()(img_, mag=choice_mag)
+        
+        # choice = random.uniform(0,1)
+        # choice_mag = random.randint(0,3)
+        # if choice > 0.7 :
+        #     img_ = MotionBlur()(img_, mag=choice_mag)
+
+        # img = np.asarray(img_)
+
+        # end augment
         sample = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         label = int(data_item['labels'])
         label = torch.tensor(label, dtype=torch.long)
+        if self.transform is not None:
+            sample = self.transform(sample)
+        return sample, label
+
+    def __len__(self):
+        return len(self.data)
+
+class FaceDataset_2class(Dataset):
+    def __init__(self, root_dir, json_path):
+        super(FaceDataset_2class, self).__init__()
+        self.transform = transforms.Compose(
+            [transforms.ToPILImage(),
+            transforms.ColorJitter(brightness=0.3, contrast=0.3,saturation=0.3, hue=0.2 ),
+            transforms.RandomResizedCrop(size=(112,112),
+                                scale=(0.85, 1.15)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(10),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ])
+        
+        self.root_dir = root_dir
+        
+        with open(json_path, 'r') as f:
+            self.data = json.load(f)
+
+    def __getitem__(self, index):
+        data_item = self.data[str(index)]
+        img = cv2.imread(os.path.join(self.root_dir, data_item['path']))
+
+        # end augment
+
+        label = int(data_item['labels'])
+        
+        if label == 0:
+            
+            img_ = Image.fromarray(img)
+        
+            # add Augment
+            img_ = random_crop(img_)
+
+            # defocus blur random
+            choice = random.uniform(0,1)
+            choice_mag = random.randint(0,3)
+            if choice > 0.7:
+                img_ = DefocusBlur()(img_, mag=choice_mag)
+            
+            choice = random.uniform(0,1)
+            choice_mag = random.randint(0,3)
+            if choice > 0.7 :
+                img_ = MotionBlur()(img_, mag=choice_mag)
+            img = np.asarray(img_)
+ 
+
+        sample = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        
+        label = torch.tensor(label, dtype=torch.long)
+        
         if self.transform is not None:
             sample = self.transform(sample)
         return sample, label

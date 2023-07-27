@@ -1,12 +1,7 @@
 tensorboard
 easydict
-sklearn
 matplotlib
 pandas
-scikit-image
-menpo
-prettytable
-mxnet==1.6.0
-pytorch_summary
-cv2
-torch==1.7.1
+scikit-learn==1.1.3
+mxnet-cu100==1.8.0.post0
+opencv-python==4.4.0.46

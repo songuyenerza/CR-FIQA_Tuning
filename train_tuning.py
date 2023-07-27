@@ -34,7 +34,6 @@ def main(args):
     local_rank = args.local_rank
     world_size =1
 
-
     if not os.path.exists(cfg.output):
         os.makedirs(cfg.output)
     else:
@@ -43,58 +42,66 @@ def main(args):
     log_root = logging.getLogger()
     init_logging(log_root, rank, cfg.output)
 
-    trainset = FaceDataset(root_dir=cfg.rec, json_path = "/home/sonnt373/Desktop/SoNg/Face_quality/dev/CR-FIQA/stress_test/data_train.json")
+    trainset = FaceDataset(root_dir=cfg.rec, json_path = "/media/thainq97/DATA/GHTK/sonnt373/CR-FIQA_Tuning/stress_test/9064_data_train.json")
 
-    # train_sampler = torch.utils.data.distributed.DistributedSampler(
-    #     trainset, shuffle=True)
-
-    # train_loader = DataLoaderX(
-    #     dataset=trainset, batch_size=cfg.batch_size,
-    #     sampler=train_sampler, num_workers=16, pin_memory=True, drop_last=True)
     train_loader = data.DataLoader(
             dataset=trainset, batch_size=cfg.batch_size, shuffle=True,
-            num_workers=16, pin_memory=True, drop_last=True)
+            num_workers=12, pin_memory=True, drop_last=True)
     
     # exit()
     # load evaluation
     print(f"name of network: {cfg.network}")
 
     if cfg.network == "iresnet100":
-        backbone = iresnet100(dropout=0.4,num_features=cfg.embedding_size)
+        backbone = iresnet100(dropout=0.4,num_features=cfg.embedding_size).cuda()
     elif cfg.network == "iresnet50":
-        backbone = iresnet50(dropout=0.4,num_features=cfg.embedding_size, use_se=False, qs=1)
+        backbone = iresnet50(dropout=0.4,num_features=cfg.embedding_size, use_se=False, qs=1).cuda()
     else:
         backbone = None
         logging.info("load backbone failed!")
 
-    # if args.resume:
-    # try:
-    backbone_pth = "/home/sonnt373/Desktop/SoNg/Face_quality/dev/face-images-quality/app/gvision/weights/CR_FIQAS/32572backbone.pth"
-    backbone.load_state_dict(torch.load(backbone_pth, map_location='cpu'))
-    logging.info("backbone student loaded successfully!")
-    logging.info("backbone resume loaded successfully!")
-        # except (FileNotFoundError, KeyError, IndexError, RuntimeError):
-        #     logging.info("load backbone resume init, failed!")
-
+    try:
+        backbone_pth = "/media/thainq97/DATA/GHTK/sonnt373/CR-FIQA_Tuning/cp/181952backbone.pth"
+        backbone.load_state_dict(torch.load(backbone_pth, map_location='cuda'))
+        logging.info("backbone student loaded successfully!")
+        logging.info("backbone resume loaded successfully!")
+    except (FileNotFoundError, KeyError, IndexError, RuntimeError):
+        logging.info("load backbone resume init, failed!")
+    backbone.cuda()
     backbone.train()
-    
+
+    # If Get name of layer of model
+    # i = 0
+    # for name, param in backbone.named_parameters():
+    #     print(f'layer num {i} name {name}')
+    #     i += 1
+    # exit()
+
+    # if Freeze backbone
+    i = 0
+    for param in backbone.parameters():
+        i += 1
+        if i < 459:
+            param.requires_grad = False
+            
     # get header
     if args.loss == "CR_FIQA_LOSS":
         header = losses.CR_FIQA_LOSS(in_features=cfg.embedding_size, out_features=cfg.num_classes, s=cfg.s, m=cfg.m)
     else:
         print("Header not implemented")
-    if args.resume:
-        try:
-            header_pth = os.path.join(cfg.identity_model, str(cfg.identity_step) + "header.pth")
-            header.load_state_dict(torch.load(header_pth, map_location=torch.device('cuda')))
+    try:
+        # header_pth = os.path.join(cfg.identity_model, str(cfg.identity_step) + "header.pth")
+        header_pth = "/media/thainq97/DATA/GHTK/sonnt373/CR-FIQA_Tuning/output/R50_CRFIQA_resnet100/26172header.pth"
+        header.load_state_dict(torch.load(header_pth, map_location=torch.device('cuda')))
 
-            if rank == 0:
-                logging.info("header resume loaded successfully!")
-        except (FileNotFoundError, KeyError, IndexError, RuntimeError):
-            logging.info("header resume init, failed!")
-    
+        if rank == 0:
+            logging.info("header resume loaded successfully!")
+    except (FileNotFoundError, KeyError, IndexError, RuntimeError):
+        logging.info("header resume init, failed!")
+
+    header.cuda()
     header.train()
-
+    
     opt_backbone = torch.optim.SGD(
         params=[{'params': backbone.parameters()}],
         lr=cfg.lr / 512 * cfg.batch_size,
@@ -142,16 +149,18 @@ def main(args):
     loss = AverageMeter()
     global_step = cfg.global_step
 
+    print("--------------start training---------------")
     for epoch in range(start_epoch, cfg.num_epoch):
         for _, (img, label) in enumerate(train_loader):
             global_step += 1
-            # img = img.cuda(local_rank, non_blocking=True)
-            # label = label.cuda(local_rank, non_blocking=True)
+            img = img.cuda(local_rank, non_blocking=True)
+            label = label.cuda(local_rank, non_blocking=True)
             features, qs = backbone(img)
-            thetas, std, ccs,nnccs = header(features, label)
-            loss_qs=criterion_qs(ccs/ nnccs,qs)
-            loss_v = criterion(thetas, label) + alpha* loss_qs
+            thetas, std, ccs, nnccs = header(features, label)
+            loss_qs= criterion_qs(ccs / nnccs, qs)
+            loss_v = criterion(thetas, label) + alpha * loss_qs
             loss_v.backward()
+            # loss_qs.backward()
             clip_grad_norm_(backbone.parameters(), max_norm=5, norm_type=2)
 
             opt_backbone.step()
@@ -162,10 +171,11 @@ def main(args):
             loss.update(loss_v.item(), 1)
             callback_logging(global_step, loss, epoch, 0,loss_qs)
             # callback_verification(global_step, backbone)
+        print(f"done epoch {epoch}")
         scheduler_backbone.step()
         scheduler_header.step()
 
-        # callback_checkpoint(global_step, backbone, header)
+        callback_checkpoint(global_step, backbone, header)
 
 
 

@@ -1,0 +1,5 @@
+torch==1.13.0
+torchvision==0.14.0
+ipython==8.6.0
+psutil==5.9.4
+seaborn==0.12.1
