@@ -60,7 +60,7 @@ def main(args):
         logging.info("load backbone failed!")
 
     try:
-        backbone_pth = "/media/thainq97/DATA/GHTK/sonnt373/CR-FIQA_Tuning/cp/181952backbone.pth"
+        backbone_pth = "/media/thainq97/DATA/GHTK/sonnt373/CR-FIQA_Tuning/output/R50_CRFIQA_resnet100_2class_2607/1964backbone.pth"
         backbone.load_state_dict(torch.load(backbone_pth, map_location='cuda'))
         logging.info("backbone student loaded successfully!")
         logging.info("backbone resume loaded successfully!")
@@ -70,11 +70,11 @@ def main(args):
     backbone.train()
 
     ## If Get name of layer of model
-    i = 0
-    for name, param in backbone.named_parameters():
-        print(f'layer num {i} name {name}')
-        i += 1
-    exit()
+    # i = 0
+    # for name, param in backbone.named_parameters():
+    #     print(f'layer num {i} name {name}')
+    #     i += 1
+    # exit()
 
     # if Freeze backbone
     i = 0
@@ -88,15 +88,15 @@ def main(args):
         header = losses.CR_FIQA_LOSS(in_features=cfg.embedding_size, out_features=cfg.num_classes, s=cfg.s, m=cfg.m)
     else:
         print("Header not implemented")
-    try:
-        # header_pth = os.path.join(cfg.identity_model, str(cfg.identity_step) + "header.pth")
-        header_pth = "/media/thainq97/DATA/GHTK/sonnt373/CR-FIQA_Tuning/output/R50_CRFIQA_resnet100/26172header.pth"
-        header.load_state_dict(torch.load(header_pth, map_location=torch.device('cuda')))
+    # try:
+    #     # header_pth = os.path.join(cfg.identity_model, str(cfg.identity_step) + "header.pth")
+    #     header_pth = "/media/thainq97/DATA/GHTK/sonnt373/CR-FIQA_Tuning/output/R50_CRFIQA_resnet100/26172header.pth"
+    #     header.load_state_dict(torch.load(header_pth, map_location=torch.device('cuda')))
 
-        if rank == 0:
-            logging.info("header resume loaded successfully!")
-    except (FileNotFoundError, KeyError, IndexError, RuntimeError):
-        logging.info("header resume init, failed!")
+    #     if rank == 0:
+    #         logging.info("header resume loaded successfully!")
+    # except (FileNotFoundError, KeyError, IndexError, RuntimeError):
+    #     logging.info("header resume init, failed!")
 
     header.cuda()
     header.train()

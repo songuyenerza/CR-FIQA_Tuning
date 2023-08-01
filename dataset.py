@@ -241,24 +241,24 @@ class FaceDataset_2class(Dataset):
 
         label = int(data_item['labels'])
         
-        if label == 0:
+        # if label == 0:
             
-            img_ = Image.fromarray(img)
+        #     img_ = Image.fromarray(img)
         
-            # add Augment
-            img_ = random_crop(img_)
+        #     # add Augment
+        #     img_ = random_crop(img_)
 
-            # defocus blur random
-            choice = random.uniform(0,1)
-            choice_mag = random.randint(0,3)
-            if choice > 0.7:
-                img_ = DefocusBlur()(img_, mag=choice_mag)
+        #     # defocus blur random
+        #     choice = random.uniform(0,1)
+        #     choice_mag = random.randint(0,3)
+        #     if choice > 0.7:
+        #         img_ = DefocusBlur()(img_, mag=choice_mag)
             
-            choice = random.uniform(0,1)
-            choice_mag = random.randint(0,3)
-            if choice > 0.7 :
-                img_ = MotionBlur()(img_, mag=choice_mag)
-            img = np.asarray(img_)
+        #     choice = random.uniform(0,1)
+        #     choice_mag = random.randint(0,3)
+        #     if choice > 0.7 :
+        #         img_ = MotionBlur()(img_, mag=choice_mag)
+        #     img = np.asarray(img_)
  
 
         sample = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
